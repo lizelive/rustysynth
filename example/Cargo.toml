@@ -7,3 +7,10 @@ edition = "2021"
 
 [dependencies]
 rustysynth = { path = "../rustysynth" }
+
+[[example]]
+name = "sf3"
+required-features = ["rustysynth/sf3"]
+
+[features]
+sf3 = ["rustysynth/sf3"]

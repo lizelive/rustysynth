@@ -77,6 +77,8 @@ pub enum SoundFontError {
     ZoneNotFound,
     InvalidGeneratorList,
     SanityCheckFailed,
+    #[cfg(feature = "sf3")]
+    SampleDecompressionFailed(String),
 }
 
 impl error::Error for SoundFontError {
@@ -143,6 +145,10 @@ impl fmt::Display for SoundFontError {
             SoundFontError::ZoneNotFound => write!(f, "no valid zone was found"),
             SoundFontError::InvalidGeneratorList => write!(f, "the generator list is invalid"),
             SoundFontError::SanityCheckFailed => write!(f, "sanity check failed"),
+            #[cfg(feature = "sf3")]
+            SoundFontError::SampleDecompressionFailed(message) => {
+                write!(f, "failed to decompress the sample data: {message}")
+            }
         }
     }
 }

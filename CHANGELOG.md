@@ -1,3 +1,7 @@
+# v1.4.0
+
+- Added optional support for SoundFont3 (.sf3) files with Ogg Vorbis compressed samples, behind the `sf3` feature flag (uses the `lewton` decoder).
+
 # v1.3.6
 
 - Various code clean-ups ([thanks to @sevonj](https://github.com/sinshu/rustysynth/issues/42)).

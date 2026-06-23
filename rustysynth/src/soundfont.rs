@@ -48,8 +48,11 @@ impl SoundFont {
         }
 
         let info = SoundFontInfo::new(reader)?;
-        let sample_data = SoundFontSampleData::new(reader)?;
-        let parameters = SoundFontParameters::new(reader)?;
+        // The raw sample bytes are read first, then handed to the parameters,
+        // which decode them (decompressing SoundFont3 Ogg Vorbis samples and
+        // rewriting the sample headers) before the instrument regions are built.
+        let sample_bytes = SoundFontSampleData::read(reader)?;
+        let (parameters, sample_data) = SoundFontParameters::load(reader, sample_bytes)?;
 
         let sound_font = Self {
             info,
@@ -137,6 +140,7 @@ mod tests {
             .join("samples")
     }
 
+    #[cfg(not(feature = "sf3"))]
     #[test]
     fn test_load_reject_sf3() {
         let path = samples_dir_path().join("dummy.sf3");
@@ -145,6 +149,47 @@ mod tests {
             SoundFont::new(&mut file),
             Err(SoundFontError::UnsupportedSampleFormat)
         ));
+    }
+
+    #[cfg(feature = "sf3")]
+    #[test]
+    fn test_load_sf3() {
+        let path = samples_dir_path().join("FluidR3Mono_GM.sf3");
+        let mut file = File::open(&path).unwrap();
+        let sound_font = SoundFont::new(&mut file).unwrap();
+
+        // The compressed samples should have been decoded into PCM.
+        assert_eq!(sound_font.get_bits_per_sample(), 16);
+        assert!(!sound_font.get_wave_data().is_empty());
+        assert!(!sound_font.get_sample_headers().is_empty());
+        assert!(!sound_font.get_presets().is_empty());
+        assert!(!sound_font.get_instruments().is_empty());
+
+        // Every sample header must reference valid PCM after decoding.
+        let len = sound_font.get_wave_data().len();
+        for sample in sound_font.get_sample_headers() {
+            assert!(sample.get_start() >= 0);
+            assert!(sample.get_end() as usize <= len);
+            assert!(sample.get_start() < sample.get_end());
+        }
+
+        // Instrument regions must reference the decoded PCM, not the original Ogg
+        // byte offsets. Rendering a note should produce audible output (this
+        // guards against decoding the samples after the regions are built).
+        use crate::{Synthesizer, SynthesizerSettings};
+        use std::sync::Arc;
+
+        let sound_font = Arc::new(sound_font);
+        let settings = SynthesizerSettings::new(44100);
+        let mut synthesizer = Synthesizer::new(&sound_font, &settings).unwrap();
+        synthesizer.note_on(0, 60, 100); // grand piano, middle C
+
+        let mut left = vec![0_f32; 44100];
+        let mut right = vec![0_f32; 44100];
+        synthesizer.render(&mut left, &mut right);
+
+        let peak = left.iter().fold(0_f32, |m, v| m.max(v.abs()));
+        assert!(peak > 0.01, "rendered note was effectively silent (peak {peak})");
     }
 
     // smpl sub-chunk exists, but is zero-length.
